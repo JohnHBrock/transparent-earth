@@ -114,33 +114,37 @@ class MainActivity : AppCompatActivity() {
         targetPlace = place
 
         currentLocation?.let { loc ->
-            val bearing = GeoUtils.calculateBearing(
+            // Calculate direction to point through Earth to see this place
+            val direction = GeoUtils.calculateDirectionToPointThroughEarth(
                 loc.latitude, loc.longitude,
                 place.latitude, place.longitude
             )
+
             val distance = GeoUtils.calculateDistance(
                 loc.latitude, loc.longitude,
                 place.latitude, place.longitude
             )
 
-            binding.arOverlayView.setTargetPlace(place, bearing)
+            direction?.let { dir ->
+                binding.arOverlayView.setTargetPlace(place, dir.azimuth, dir.pitch)
 
-            binding.locationNameText.text = place.name
-            binding.locationDetailsText.text = "${place.country} • ${place.type.name.lowercase()}"
-            binding.distanceText.text = "Distance: ${GeoUtils.formatDistance(distance)}"
-            binding.bottomPanel.visibility = android.view.View.VISIBLE
+                binding.locationNameText.text = place.name
+                binding.locationDetailsText.text = "${place.country} • ${place.type.name.lowercase()}"
+                binding.distanceText.text = "Distance: ${GeoUtils.formatDistance(distance)}"
+                binding.bottomPanel.visibility = android.view.View.VISIBLE
 
-            binding.infoText.text = getString(R.string.searching)
-            binding.clearButton.visibility = android.view.View.VISIBLE
+                binding.infoText.text = "Point your phone to see ${place.name} through Earth"
+                binding.clearButton.visibility = android.view.View.VISIBLE
 
-            hideKeyboard()
+                hideKeyboard()
+            }
         }
     }
 
     private fun clearSearch() {
         targetPlace = null
         binding.searchEditText.text.clear()
-        binding.arOverlayView.setTargetPlace(null, 0.0)
+        binding.arOverlayView.setTargetPlace(null, 0.0, 0.0)
         binding.bottomPanel.visibility = android.view.View.GONE
         binding.clearButton.visibility = android.view.View.GONE
         binding.infoText.text = getString(R.string.point_at_ground)
@@ -155,21 +159,22 @@ class MainActivity : AppCompatActivity() {
     private fun updateVisiblePlaces() {
         val location = currentLocation ?: return
 
-        if (!orientationManager.isPointingDown() && targetPlace == null) {
-            return
-        }
+        // Get current orientation
+        val azimuth = orientationManager.azimuth.toDouble()
+        val pitch = orientationManager.pitch.toDouble()
 
-        val antipodal = GeoUtils.calculateAntipodal(location.latitude, location.longitude)
-
-        val nearbyPlaces = GeoUtils.findNearbyPlaces(
-            antipodal.latitude,
-            antipodal.longitude,
+        // Find places along the ray through Earth based on where user is pointing
+        val placesAlongRay = GeoUtils.findPlacesAlongRay(
+            location.latitude,
+            location.longitude,
+            azimuth,
+            pitch,
             PlacesDatabase.places,
-            radiusKm = 1000.0
+            toleranceDegrees = 10.0  // Show places within 10 degrees of the ray
         )
 
         binding.arOverlayView.updateVisiblePlaces(
-            nearbyPlaces.take(10),
+            placesAlongRay.take(15),  // Show up to 15 places
             location.latitude,
             location.longitude
         )

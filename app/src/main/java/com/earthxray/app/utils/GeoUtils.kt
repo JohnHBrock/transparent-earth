@@ -82,7 +82,19 @@ object GeoUtils {
 
         operator fun minus(other: Vector3D) = Vector3D(x - other.x, y - other.y, z - other.z)
 
+        operator fun plus(other: Vector3D) = Vector3D(x + other.x, y + other.y, z + other.z)
+
+        operator fun times(scalar: Double) = Vector3D(x * scalar, y * scalar, z * scalar)
+
         fun dot(other: Vector3D) = x * other.x + y * other.y + z * other.z
+
+        fun cross(other: Vector3D) = Vector3D(
+            y * other.z - z * other.y,
+            z * other.x - x * other.z,
+            x * other.y - y * other.x
+        )
+
+        fun magnitude() = sqrt(x * x + y * y + z * z)
     }
 
     fun latLonToVector(lat: Double, lon: Double): Vector3D {
@@ -102,5 +114,192 @@ object GeoUtils {
             distanceKm < 10 -> "%.1f km".format(distanceKm)
             else -> "${distanceKm.toInt()} km"
         }
+    }
+
+    /**
+     * Calculate where a ray through the Earth exits on the other side
+     * based on user's location and phone orientation
+     *
+     * @param userLat User's latitude
+     * @param userLon User's longitude
+     * @param azimuth Compass heading in degrees (0 = North, 90 = East)
+     * @param pitch Tilt angle in degrees (negative = pointing down)
+     * @return The lat/lon where the ray exits Earth, or null if pointing up/horizontally
+     */
+    fun calculateRayExitPoint(
+        userLat: Double,
+        userLon: Double,
+        azimuth: Double,
+        pitch: Double
+    ): Antipodal? {
+        // Only process if pointing downward
+        if (pitch > -10) return null
+
+        // Convert user position to 3D point on unit sphere
+        val userPos = latLonToVector(userLat, userLon)
+
+        // Create local coordinate system at user's position
+        // North vector: tangent to sphere pointing north
+        val north = Vector3D(
+            -sin(Math.toRadians(userLat)) * cos(Math.toRadians(userLon)),
+            -sin(Math.toRadians(userLat)) * sin(Math.toRadians(userLon)),
+            cos(Math.toRadians(userLat))
+        ).normalize()
+
+        // East vector: tangent to sphere pointing east
+        val east = Vector3D(
+            -sin(Math.toRadians(userLon)),
+            cos(Math.toRadians(userLon)),
+            0.0
+        ).normalize()
+
+        // Down vector: toward center of Earth (negative of position vector)
+        val down = userPos.times(-1.0).normalize()
+
+        // Calculate direction vector based on azimuth and pitch
+        // Azimuth rotates in the horizontal plane (north-east)
+        // Pitch rotates from horizontal down toward center
+        val azimuthRad = Math.toRadians(azimuth)
+        val pitchRad = Math.toRadians(pitch)
+
+        // Horizontal component (in north-east plane)
+        val horizontalMag = cos(pitchRad)
+        val northComponent = horizontalMag * cos(azimuthRad)
+        val eastComponent = horizontalMag * sin(azimuthRad)
+
+        // Vertical component (down)
+        val downComponent = -sin(pitchRad)
+
+        // Combine to get direction vector in local coordinates
+        val direction = (north.times(northComponent))
+            .plus(east.times(eastComponent))
+            .plus(down.times(downComponent))
+            .normalize()
+
+        // The ray goes through Earth's center, so the exit point is just
+        // the opposite direction from the entry direction
+        // If we're at position P and pointing in direction D (into Earth),
+        // the exit point is in direction -D from origin
+        val exitVector = direction.times(-1.0)
+
+        // Convert exit vector back to lat/lon
+        return vectorToLatLon(exitVector)
+    }
+
+    /**
+     * Convert a 3D unit vector to latitude and longitude
+     */
+    fun vectorToLatLon(v: Vector3D): Antipodal {
+        val normalized = v.normalize()
+
+        val lat = Math.toDegrees(asin(normalized.z))
+        val lon = Math.toDegrees(atan2(normalized.y, normalized.x))
+
+        return Antipodal(lat, lon)
+    }
+
+    /**
+     * Calculate the angle between where the user is currently pointing
+     * and where they need to point to see a specific place through Earth
+     *
+     * @return Angular distance in degrees
+     */
+    fun calculateAngularDistance(
+        userLat: Double,
+        userLon: Double,
+        currentAzimuth: Double,
+        currentPitch: Double,
+        targetLat: Double,
+        targetLon: Double
+    ): Double {
+        // Calculate where user is currently pointing
+        val currentExit = calculateRayExitPoint(userLat, userLon, currentAzimuth, currentPitch)
+            ?: return Double.MAX_VALUE
+
+        // Calculate angular distance between current exit point and target
+        return calculateDistance(currentExit.latitude, currentExit.longitude, targetLat, targetLon) / EARTH_RADIUS_KM
+    }
+
+    /**
+     * Find all places that are visible when looking through Earth from a specific position and orientation
+     */
+    fun findPlacesAlongRay(
+        userLat: Double,
+        userLon: Double,
+        azimuth: Double,
+        pitch: Double,
+        places: List<Place>,
+        toleranceDegrees: Double = 5.0
+    ): List<Pair<Place, Double>> {
+        val exitPoint = calculateRayExitPoint(userLat, userLon, azimuth, pitch)
+            ?: return emptyList()
+
+        // Find places near the exit point
+        return findNearbyPlaces(
+            exitPoint.latitude,
+            exitPoint.longitude,
+            places,
+            radiusKm = toleranceDegrees * EARTH_RADIUS_KM * PI / 180.0
+        )
+    }
+
+    data class PointingDirection(
+        val azimuth: Double,
+        val pitch: Double
+    )
+
+    /**
+     * Calculate what direction (azimuth and pitch) the user needs to point
+     * to see a specific location through the Earth
+     *
+     * @param userLat User's latitude
+     * @param userLon User's longitude
+     * @param targetLat Target location's latitude
+     * @param targetLon Target location's longitude
+     * @return The azimuth and pitch to point at, or null if same location
+     */
+    fun calculateDirectionToPointThroughEarth(
+        userLat: Double,
+        userLon: Double,
+        targetLat: Double,
+        targetLon: Double
+    ): PointingDirection? {
+        // Convert positions to 3D vectors
+        val userPos = latLonToVector(userLat, userLon)
+        val targetPos = latLonToVector(targetLat, targetLon)
+
+        // The direction to point is toward the target position
+        // (which will exit at the target on the other side)
+        val direction = (targetPos.times(-1.0)).normalize()
+
+        // Create local coordinate system at user's position
+        val north = Vector3D(
+            -sin(Math.toRadians(userLat)) * cos(Math.toRadians(userLon)),
+            -sin(Math.toRadians(userLat)) * sin(Math.toRadians(userLon)),
+            cos(Math.toRadians(userLat))
+        ).normalize()
+
+        val east = Vector3D(
+            -sin(Math.toRadians(userLon)),
+            cos(Math.toRadians(userLon)),
+            0.0
+        ).normalize()
+
+        val down = userPos.times(-1.0).normalize()
+
+        // Project direction onto local coordinate system
+        val northComp = direction.dot(north)
+        val eastComp = direction.dot(east)
+        val downComp = direction.dot(down)
+
+        // Calculate azimuth (compass direction)
+        val azimuth = Math.toDegrees(atan2(eastComp, northComp))
+        val normalizedAzimuth = (azimuth + 360) % 360
+
+        // Calculate pitch (negative = down)
+        val horizontalMag = sqrt(northComp * northComp + eastComp * eastComp)
+        val pitch = -Math.toDegrees(atan2(downComp, horizontalMag))
+
+        return PointingDirection(normalizedAzimuth, pitch)
     }
 }

@@ -62,12 +62,16 @@ class AROverlayView @JvmOverloads constructor(
         val screenX: Float,
         val screenY: Float,
         val distance: Double,
-        val bearing: Double
+        val azimuth: Double,
+        val pitch: Double
     )
 
     private var visiblePlaces = listOf<VisiblePlace>()
+    private var userLatitude: Double = 0.0
+    private var userLongitude: Double = 0.0
     private var targetPlace: Place? = null
-    private var targetBearing: Double = 0.0
+    private var targetAzimuth: Double = 0.0
+    private var targetPitch: Double = 0.0
     private var currentAzimuth: Float = 0f
     private var currentPitch: Float = 0f
     private var fieldOfView: Float = 60f
@@ -83,20 +87,29 @@ class AROverlayView @JvmOverloads constructor(
         userLat: Double,
         userLon: Double
     ) {
+        this.userLatitude = userLat
+        this.userLongitude = userLon
+
         visiblePlaces = places.mapNotNull { (place, distance) ->
-            val bearing = GeoUtils.calculateBearing(userLat, userLon, place.latitude, place.longitude)
-            val screenPos = calculateScreenPosition(bearing, 0.0)
+            // Calculate direction to point to see this place through Earth
+            val direction = GeoUtils.calculateDirectionToPointThroughEarth(
+                userLat, userLon,
+                place.latitude, place.longitude
+            ) ?: return@mapNotNull null
+
+            val screenPos = calculateScreenPosition(direction.azimuth, direction.pitch)
 
             screenPos?.let {
-                VisiblePlace(place, it.first, it.second, distance, bearing)
+                VisiblePlace(place, it.first, it.second, distance, direction.azimuth, direction.pitch)
             }
         }
         invalidate()
     }
 
-    fun setTargetPlace(place: Place?, bearing: Double) {
+    fun setTargetPlace(place: Place?, azimuth: Double, pitch: Double) {
         this.targetPlace = place
-        this.targetBearing = bearing
+        this.targetAzimuth = azimuth
+        this.targetPitch = pitch
         invalidate()
     }
 
@@ -167,25 +180,49 @@ class AROverlayView @JvmOverloads constructor(
     }
 
     private fun drawTargetArrow(canvas: Canvas) {
-        val deltaBearing = normalizeDegrees(targetBearing - currentAzimuth)
+        val deltaAzimuth = normalizeDegrees(targetAzimuth - currentAzimuth)
+        val deltaPitch = targetPitch - currentPitch
 
-        val isOnScreen = abs(deltaBearing) <= fieldOfView / 2
+        val isOnScreen = abs(deltaAzimuth) <= fieldOfView / 2 && abs(deltaPitch) <= fieldOfView / 2
 
         if (!isOnScreen) {
-            val arrowX = if (deltaBearing > 0) width - 100f else 100f
-            val arrowY = height / 2f
+            // Draw arrow at edge of screen pointing in the right direction
+            val centerX = width / 2f
+            val centerY = height / 2f
+
+            // Calculate position based on both horizontal and vertical offset
+            val horizontalFactor = deltaAzimuth.coerceIn(-fieldOfView / 2, fieldOfView / 2) / (fieldOfView / 2)
+            val verticalFactor = deltaPitch.coerceIn(-fieldOfView / 2, fieldOfView / 2) / (fieldOfView / 2)
+
+            val arrowX = centerX + (horizontalFactor * width / 2.5).toFloat()
+            val arrowY = centerY - (verticalFactor * height / 2.5).toFloat()
 
             val arrowSize = 60f
             val arrowPath = Path()
 
-            if (deltaBearing > 0) {
-                arrowPath.moveTo(arrowX, arrowY)
-                arrowPath.lineTo(arrowX - arrowSize, arrowY - arrowSize / 2)
-                arrowPath.lineTo(arrowX - arrowSize, arrowY + arrowSize / 2)
+            // Point arrow in the direction of the target
+            if (abs(deltaAzimuth) > abs(deltaPitch)) {
+                // Horizontal arrow (left or right)
+                if (deltaAzimuth > 0) {
+                    arrowPath.moveTo(arrowX, arrowY)
+                    arrowPath.lineTo(arrowX - arrowSize, arrowY - arrowSize / 2)
+                    arrowPath.lineTo(arrowX - arrowSize, arrowY + arrowSize / 2)
+                } else {
+                    arrowPath.moveTo(arrowX, arrowY)
+                    arrowPath.lineTo(arrowX + arrowSize, arrowY - arrowSize / 2)
+                    arrowPath.lineTo(arrowX + arrowSize, arrowY + arrowSize / 2)
+                }
             } else {
-                arrowPath.moveTo(arrowX, arrowY)
-                arrowPath.lineTo(arrowX + arrowSize, arrowY - arrowSize / 2)
-                arrowPath.lineTo(arrowX + arrowSize, arrowY + arrowSize / 2)
+                // Vertical arrow (up or down)
+                if (deltaPitch > 0) {
+                    arrowPath.moveTo(arrowX, arrowY)
+                    arrowPath.lineTo(arrowX - arrowSize / 2, arrowY + arrowSize)
+                    arrowPath.lineTo(arrowX + arrowSize / 2, arrowY + arrowSize)
+                } else {
+                    arrowPath.moveTo(arrowX, arrowY)
+                    arrowPath.lineTo(arrowX - arrowSize / 2, arrowY - arrowSize)
+                    arrowPath.lineTo(arrowX + arrowSize / 2, arrowY - arrowSize)
+                }
             }
             arrowPath.close()
 
@@ -197,11 +234,11 @@ class AROverlayView @JvmOverloads constructor(
                 val textY = arrowY + 100
                 canvas.drawText(it.name, textX, textY, smallTextPaint)
 
-                val angle = abs(deltaBearing).toInt()
-                canvas.drawText("${angle}°", textX, textY + 35, smallTextPaint)
+                val angle = sqrt(deltaAzimuth * deltaAzimuth + deltaPitch * deltaPitch).toInt()
+                canvas.drawText("${angle}° away", textX, textY + 35, smallTextPaint)
             }
         } else {
-            val screenPos = calculateScreenPosition(targetBearing, 0.0)
+            val screenPos = calculateScreenPosition(targetAzimuth, targetPitch)
             screenPos?.let { (x, y) ->
                 val arrowSize = 80f
                 val arrowPath = Path().apply {
