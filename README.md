@@ -19,14 +19,18 @@ Search for any city or landmark by name. The app calculates the exact direction 
 ### 📍 Real-time AR Overlay
 Uses your phone's camera, GPS, compass, and orientation sensors to create a real-time AR experience showing:
 - Cities and landmarks within your camera's field of view through the Earth
-- Distance information for each location
+- Dual distance display: straight-line distance through Earth and great-circle surface distance
 - 3D directional guidance arrows when searching (horizontal and vertical)
 - Interactive crosshair for precise aiming
 - Adjustable population filter to control city density
 - Smart sorting by population (largest cities shown first)
 
 ### 🗺️ Extensive Database
-Includes over 100 major cities and famous landmarks worldwide:
+Combines a curated static database with dynamic Google Places API integration:
+- Over 100 major cities and famous landmarks in static database
+- Real-time nearby places from Google Places API (cities, landmarks, tourist attractions)
+- Automatic fetching when you move more than 10km
+- Smart merging to avoid duplicates
 - Major cities across all continents
 - World capitals
 - Famous landmarks (Eiffel Tower, Taj Mahal, Great Wall, etc.)
@@ -92,13 +96,22 @@ git clone <repository-url>
 cd transparent-earth
 ```
 
-2. Open the project in Android Studio
+2. **Set up Google Places API key** (optional but recommended):
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+   - Enable the "Places API (New)"
+   - Create credentials (API key)
+   - Open `app/src/main/AndroidManifest.xml`
+   - Replace `YOUR_API_KEY_HERE` with your actual API key
+   - **Note:** The app works without an API key using the static database, but won't fetch nearby places
 
-3. Sync Gradle files
+3. Open the project in Android Studio
 
-4. Connect an Android device or start an emulator
+4. Sync Gradle files
 
-5. Run the app (Shift + F10 or click the Run button)
+5. Connect an Android device or start an emulator
+
+6. Run the app (Shift + F10 or click the Run button)
 
 ### Building APK
 ```bash
@@ -173,19 +186,19 @@ The APK will be generated at: `app/build/outputs/apk/debug/app-debug.apk`
 The app requires:
 - `CAMERA`: For the AR view
 - `ACCESS_FINE_LOCATION`: To determine your position on Earth
-- `INTERNET`: For potential future features
+- `INTERNET`: For Google Places API to fetch nearby locations
 
 ## Future Enhancements
 
 Potential improvements:
-- Integration with Google Places API for more locations
 - Save favorite locations
 - Share screenshots of discovered places
 - Night mode
 - 3D terrain visualization
 - Historical facts about locations
-- Distance through Earth's core calculation
 - Support for custom location marking
+- Offline maps and caching
+- AR path visualization showing the ray through Earth
 
 ## License
 
