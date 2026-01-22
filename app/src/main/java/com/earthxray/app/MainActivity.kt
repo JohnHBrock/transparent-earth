@@ -34,8 +34,6 @@ class MainActivity : AppCompatActivity() {
     private var currentLocation: Location? = null
     private var targetPlace: Place? = null
     private var minPopulation: Int = 0
-    private var allPlaces: List<Place> = PlacesDatabase.places
-    private var lastApiUpdateLocation: Location? = null
 
     private val CAMERA_PERMISSION_REQUEST = 100
     private val LOCATION_PERMISSION_REQUEST = 101
@@ -78,18 +76,6 @@ class MainActivity : AppCompatActivity() {
                 override fun onLocationUpdated(location: Location) {
                     currentLocation = location
                     updateVisiblePlaces()
-
-                    // Fetch nearby places from API if we've moved significantly
-                    val shouldUpdateApi = lastApiUpdateLocation?.let { lastLoc ->
-                        GeoUtils.calculateDistance(
-                            lastLoc.latitude, lastLoc.longitude,
-                            location.latitude, location.longitude
-                        ) > 10.0 // Update if moved more than 10km
-                    } ?: true // Always update on first location
-
-                    if (shouldUpdateApi) {
-                        fetchNearbyPlaces(location)
-                    }
                 }
             })
         }
@@ -145,39 +131,80 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val results = PlacesDatabase.searchPlaces(query)
-        if (results.isEmpty()) {
-            Toast.makeText(this, "No results found for '$query'", Toast.LENGTH_SHORT).show()
-            return
-        }
+        // Search asynchronously in both static DB and Google Places API
+        lifecycleScope.launch {
+            try {
+                val results = placesApiManager.searchAllSources(query)
 
-        val place = results.first()
-        targetPlace = place
+                if (results.isEmpty()) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "No results found for '$query'",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@launch
+                }
 
-        currentLocation?.let { loc ->
-            // Calculate direction to point through Earth to see this place
-            val direction = GeoUtils.calculateDirectionToPointThroughEarth(
-                loc.latitude, loc.longitude,
-                place.latitude, place.longitude
-            )
+                // Handle the first result
+                val firstResult = results.first()
+                val place = when (firstResult) {
+                    is PlacesApiManager.SearchResult.StaticPlace -> {
+                        // Result from static database - already have coordinates
+                        firstResult.place
+                    }
+                    is PlacesApiManager.SearchResult.ApiPrediction -> {
+                        // Result from Google Places API - need to fetch details
+                        placesApiManager.getPlaceDetails(firstResult.getPlaceId())
+                            ?: run {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Could not load place details",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@launch
+                            }
+                    }
+                }
 
-            val distance = GeoUtils.calculateDistance(
-                loc.latitude, loc.longitude,
-                place.latitude, place.longitude
-            )
+                targetPlace = place
 
-            direction?.let { dir ->
-                binding.arOverlayView.setTargetPlace(place, dir.azimuth, dir.pitch)
+                currentLocation?.let { loc ->
+                    // Calculate direction to point through Earth to see this place
+                    val direction = GeoUtils.calculateDirectionToPointThroughEarth(
+                        loc.latitude, loc.longitude,
+                        place.latitude, place.longitude
+                    )
 
-                binding.locationNameText.text = place.name
-                binding.locationDetailsText.text = "${place.country} • ${place.type.name.lowercase()}"
-                binding.distanceText.text = "Distance: ${GeoUtils.formatDistance(distance)}"
-                binding.bottomPanel.visibility = android.view.View.VISIBLE
+                    val surfaceDistance = GeoUtils.calculateDistance(
+                        loc.latitude, loc.longitude,
+                        place.latitude, place.longitude
+                    )
 
-                binding.infoText.text = "Point your phone to see ${place.name} through Earth"
-                binding.clearButton.visibility = android.view.View.VISIBLE
+                    val straightLineDistance = GeoUtils.calculateStraightLineDistance(
+                        loc.latitude, loc.longitude,
+                        place.latitude, place.longitude
+                    )
 
-                hideKeyboard()
+                    direction?.let { dir ->
+                        binding.arOverlayView.setTargetPlace(place, dir.azimuth, dir.pitch)
+
+                        binding.locationNameText.text = place.name
+                        binding.locationDetailsText.text = "${place.country} • ${place.type.name.lowercase()}"
+                        binding.distanceText.text = GeoUtils.formatBothDistances(surfaceDistance, straightLineDistance)
+                        binding.bottomPanel.visibility = android.view.View.VISIBLE
+
+                        binding.infoText.text = "Point your phone to see ${place.name} through Earth"
+                        binding.clearButton.visibility = android.view.View.VISIBLE
+
+                        hideKeyboard()
+                    }
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Search error: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -220,7 +247,7 @@ class MainActivity : AppCompatActivity() {
             location.longitude,
             azimuth,
             pitch,
-            allPlaces,
+            PlacesDatabase.places,
             fieldOfViewDegrees = 60.0,
             minPopulation = minPopulation
         )
@@ -336,28 +363,6 @@ class MainActivity : AppCompatActivity() {
                     "Location acquired. Point at ground to see through Earth!",
                     Toast.LENGTH_LONG
                 ).show()
-            }
-        }
-    }
-
-    private fun fetchNearbyPlaces(location: Location) {
-        lifecycleScope.launch {
-            try {
-                // Fetch nearby places from Google Places API
-                val nearbyPlaces = placesApiManager.fetchNearbyPlaces(
-                    location.latitude,
-                    location.longitude,
-                    radiusMeters = 50000.0 // 50km radius
-                )
-
-                // Merge with static database
-                allPlaces = placesApiManager.mergePlaces(nearbyPlaces, PlacesDatabase.places)
-                lastApiUpdateLocation = location
-
-                // Update the view with new places
-                updateVisiblePlaces()
-            } catch (e: Exception) {
-                // Silently fail - continue using static database
             }
         }
     }

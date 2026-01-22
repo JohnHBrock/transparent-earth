@@ -13,8 +13,13 @@ Point your phone at the ground in any direction and the app shows you cities and
 - In Chicago pointing straight down → See your antipodal point in the Indian Ocean
 - In NYC pointing toward Europe → See London, Paris, or other European cities
 
-### 🔍 Search for Any Location
-Search for any city or landmark by name. The app calculates the exact direction to point your phone (both horizontal and vertical) and shows directional arrows guiding you to that location through the Earth.
+### 🔍 Search for Any Location Worldwide
+Search for any city, landmark, or address on Earth by name:
+- Searches both the curated database and Google Places API worldwide
+- Type any location name and get results from anywhere on the planet
+- The app calculates the exact direction to point your phone (both horizontal and vertical)
+- Directional arrows guide you to that location through the Earth
+- Works with specific addresses, famous landmarks, cities, or general location names
 
 ### 📍 Real-time AR Overlay
 Uses your phone's camera, GPS, compass, and orientation sensors to create a real-time AR experience showing:
@@ -25,16 +30,17 @@ Uses your phone's camera, GPS, compass, and orientation sensors to create a real
 - Adjustable population filter to control city density
 - Smart sorting by population (largest cities shown first)
 
-### 🗺️ Extensive Database
-Combines a curated static database with dynamic Google Places API integration:
-- Over 100 major cities and famous landmarks in static database
-- Real-time nearby places from Google Places API (cities, landmarks, tourist attractions)
-- Automatic fetching when you move more than 10km
-- Smart merging to avoid duplicates
-- Major cities across all continents
-- World capitals
-- Famous landmarks (Eiffel Tower, Taj Mahal, Great Wall, etc.)
-- Population data for cities
+### 🗺️ Location Database
+Combines a curated static database with Google Places API search integration:
+- **Static Database**: Over 100 major cities and famous landmarks
+  - Major cities across all continents
+  - World capitals
+  - Famous landmarks (Eiffel Tower, Taj Mahal, Great Wall, etc.)
+  - Population data for filtering and sorting
+- **Google Places API Search**: Find ANY location worldwide
+  - Search for any city, landmark, address, or business
+  - Real-time results from Google's global database
+  - Seamless integration with the AR pointing system
 
 ## How It Works
 
@@ -103,7 +109,7 @@ cd transparent-earth
    - Create credentials (API key)
    - Open `app/src/main/AndroidManifest.xml`
    - Replace `YOUR_API_KEY_HERE` with your actual API key
-   - **Note:** The app works without an API key using the static database, but won't fetch nearby places
+   - **Note:** Without an API key, search is limited to the 100+ locations in the static database. With an API key, you can search for ANY location worldwide.
 
 3. Open the project in Android Studio
 
@@ -186,7 +192,7 @@ The APK will be generated at: `app/build/outputs/apk/debug/app-debug.apk`
 The app requires:
 - `CAMERA`: For the AR view
 - `ACCESS_FINE_LOCATION`: To determine your position on Earth
-- `INTERNET`: For Google Places API to fetch nearby locations
+- `INTERNET`: For Google Places API to search for locations worldwide (optional - app works offline with static database)
 
 ## Future Enhancements
 
