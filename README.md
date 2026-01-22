@@ -4,8 +4,8 @@ An augmented reality Android app that lets you look through the Earth to see wha
 
 ## Features
 
-### 🌍 See Through Earth in ANY Direction
-Point your phone at the ground in any direction and the app will show you ALL cities and landmarks visible in your current field of view through the Earth. Whether you're looking at nearby cities through the crust or distant continents through the core, the app calculates and displays what you'd see if Earth were transparent - just like looking through a window showing everything on the other side.
+### 🌍 See Through Earth
+Point your phone at the ground in any direction and the app shows you cities and landmarks visible through the Earth in that direction. Whether you're looking at nearby cities through the crust or distant continents through the core, the app calculates and displays what you'd see if Earth were transparent - like looking through a window to the other side of the planet.
 
 **Examples:**
 - In Chicago pointing slightly east → See Gary, IN through the Earth
@@ -18,11 +18,11 @@ Search for any city or landmark by name. The app calculates the exact direction 
 
 ### 📍 Real-time AR Overlay
 Uses your phone's camera, GPS, compass, and orientation sensors to create a real-time AR experience showing:
-- **All cities within your field of view** through the Earth (not just one ray)
+- Cities and landmarks within your camera's field of view through the Earth
 - Distance information for each location
-- 3D directional guidance arrows when searching (horizontal AND vertical)
+- 3D directional guidance arrows when searching (horizontal and vertical)
 - Interactive crosshair for precise aiming
-- **Adjustable population filter** to control city density and reduce clutter
+- Adjustable population filter to control city density
 - Smart sorting by population (largest cities shown first)
 
 ### 🗺️ Extensive Database
@@ -35,10 +35,10 @@ Includes over 100 major cities and famous landmarks worldwide:
 ## How It Works
 
 ### Field-of-View Through-Earth Calculation
-The app shows ALL cities visible in your camera's field of view through Earth:
+The app determines which cities are visible in your camera's field of view through Earth:
 1. Your GPS location is determined (your position on Earth's surface)
 2. Your phone's orientation is tracked (azimuth/compass direction + pitch/tilt angle)
-3. For EACH city in the database:
+3. For each city in the database:
    - The app calculates what direction you'd need to point to see that city through Earth
    - Checks if that direction is within your current camera field of view (±30° horizontal and vertical)
    - If yes, projects the city onto your screen at the correct position
@@ -115,9 +115,9 @@ The APK will be generated at: `app/build/outputs/apk/debug/app-debug.apk`
    - Point your phone toward the ground in any direction
    - Sweep left and right to scan different directions through Earth
    - Tilt your phone to different angles to look through Earth at various trajectories
-   - Cities and landmarks will appear with AR markers showing their names and distances
-   - Watch as different locations appear based on where you're pointing
-   - **All cities within your field of view** are shown (not just along one ray)
+   - Cities and landmarks appear with AR markers showing their names and distances
+   - Different locations appear based on where you're pointing
+   - Cities within your camera's field of view are shown simultaneously
 
 3. **Search for Specific Places**:
    - Tap the search bar at the top
