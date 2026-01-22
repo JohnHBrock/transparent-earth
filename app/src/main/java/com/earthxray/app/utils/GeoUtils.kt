@@ -221,26 +221,62 @@ object GeoUtils {
     }
 
     /**
-     * Find all places that are visible when looking through Earth from a specific position and orientation
+     * Find all places that are visible in the current field of view when looking through Earth
+     *
+     * @param userLat User's latitude
+     * @param userLon User's longitude
+     * @param azimuth Current compass heading
+     * @param pitch Current tilt angle
+     * @param places List of all places to check
+     * @param fieldOfViewDegrees Field of view in degrees (default 60)
+     * @param minPopulation Minimum population to include (0 for all)
+     * @return List of places with their distances, sorted by population
      */
-    fun findPlacesAlongRay(
+    fun findPlacesInView(
         userLat: Double,
         userLon: Double,
         azimuth: Double,
         pitch: Double,
         places: List<Place>,
-        toleranceDegrees: Double = 5.0
+        fieldOfViewDegrees: Double = 60.0,
+        minPopulation: Int = 0
     ): List<Pair<Place, Double>> {
-        val exitPoint = calculateRayExitPoint(userLat, userLon, azimuth, pitch)
-            ?: return emptyList()
+        val halfFOV = fieldOfViewDegrees / 2.0
 
-        // Find places near the exit point
-        return findNearbyPlaces(
-            exitPoint.latitude,
-            exitPoint.longitude,
-            places,
-            radiusKm = toleranceDegrees * EARTH_RADIUS_KM * PI / 180.0
-        )
+        return places.mapNotNull { place ->
+            // Calculate what direction we'd need to point to see this place through Earth
+            val direction = calculateDirectionToPointThroughEarth(
+                userLat, userLon,
+                place.latitude, place.longitude
+            ) ?: return@mapNotNull null
+
+            // Check if this direction is within our current field of view
+            val deltaAzimuth = normalizeDegrees(direction.azimuth - azimuth)
+            val deltaPitch = direction.pitch - pitch
+
+            // Check if place is within FOV
+            if (abs(deltaAzimuth) <= halfFOV && abs(deltaPitch) <= halfFOV) {
+                // Check population threshold
+                if (place.population >= minPopulation) {
+                    val distance = calculateDistance(
+                        userLat, userLon,
+                        place.latitude, place.longitude
+                    )
+                    Pair(place, distance)
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+        }.sortedByDescending { it.first.population }  // Sort by population, highest first
+    }
+
+    private fun normalizeDegrees(angle: Double): Double {
+        var normalized = angle
+        while (normalized > 180) normalized -= 360
+        while (normalized < -180) normalized += 360
+        return normalized
     }
 
     data class PointingDirection(

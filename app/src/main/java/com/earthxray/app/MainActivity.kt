@@ -31,9 +31,22 @@ class MainActivity : AppCompatActivity() {
     private var camera: Camera? = null
     private var currentLocation: Location? = null
     private var targetPlace: Place? = null
+    private var minPopulation: Int = 0
 
     private val CAMERA_PERMISSION_REQUEST = 100
     private val LOCATION_PERMISSION_REQUEST = 101
+
+    private val populationThresholds = listOf(
+        0,          // All cities
+        10_000,     // 10k
+        50_000,     // 50k
+        100_000,    // 100k
+        250_000,    // 250k
+        500_000,    // 500k
+        1_000_000,  // 1M
+        2_500_000,  // 2.5M
+        5_000_000   // 5M+
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,6 +95,17 @@ class MainActivity : AppCompatActivity() {
         binding.clearButton.setOnClickListener {
             clearSearch()
         }
+
+        binding.populationSlider.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                minPopulation = populationThresholds[progress]
+                updatePopulationLabel()
+                updateVisiblePlaces()
+            }
+
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
 
         binding.surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
@@ -156,6 +180,16 @@ class MainActivity : AppCompatActivity() {
         imm.hideSoftInputFromWindow(binding.searchEditText.windowToken, 0)
     }
 
+    private fun updatePopulationLabel() {
+        val text = when (minPopulation) {
+            0 -> "Min Population: All Cities"
+            in 1..999 -> "Min Population: $minPopulation"
+            in 1_000..999_999 -> "Min Population: ${minPopulation / 1_000}k"
+            else -> "Min Population: ${minPopulation / 1_000_000}M"
+        }
+        binding.populationLabel.text = text
+    }
+
     private fun updateVisiblePlaces() {
         val location = currentLocation ?: return
 
@@ -163,18 +197,20 @@ class MainActivity : AppCompatActivity() {
         val azimuth = orientationManager.azimuth.toDouble()
         val pitch = orientationManager.pitch.toDouble()
 
-        // Find places along the ray through Earth based on where user is pointing
-        val placesAlongRay = GeoUtils.findPlacesAlongRay(
+        // Find all places visible in current field of view
+        val placesInView = GeoUtils.findPlacesInView(
             location.latitude,
             location.longitude,
             azimuth,
             pitch,
             PlacesDatabase.places,
-            toleranceDegrees = 10.0  // Show places within 10 degrees of the ray
+            fieldOfViewDegrees = 60.0,
+            minPopulation = minPopulation
         )
 
+        // Limit to top 20 by population to avoid clutter
         binding.arOverlayView.updateVisiblePlaces(
-            placesAlongRay.take(15),  // Show up to 15 places
+            placesInView.take(20),
             location.latitude,
             location.longitude
         )
