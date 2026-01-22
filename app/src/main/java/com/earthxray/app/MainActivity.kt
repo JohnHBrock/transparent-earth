@@ -14,6 +14,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.earthxray.app.data.Place
+import com.earthxray.app.data.PlacesApiManager
 import com.earthxray.app.data.PlacesDatabase
 import com.earthxray.app.databinding.ActivityMainBinding
 import com.earthxray.app.sensors.LocationTracker
@@ -27,11 +28,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var orientationManager: OrientationManager
     private lateinit var locationTracker: LocationTracker
+    private lateinit var placesApiManager: PlacesApiManager
 
     private var camera: Camera? = null
     private var currentLocation: Location? = null
     private var targetPlace: Place? = null
     private var minPopulation: Int = 0
+    private var allPlaces: List<Place> = PlacesDatabase.places
+    private var lastApiUpdateLocation: Location? = null
 
     private val CAMERA_PERMISSION_REQUEST = 100
     private val LOCATION_PERMISSION_REQUEST = 101
@@ -53,6 +57,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        placesApiManager = PlacesApiManager(this)
         setupSensors()
         setupUI()
         requestPermissions()
@@ -73,6 +78,18 @@ class MainActivity : AppCompatActivity() {
                 override fun onLocationUpdated(location: Location) {
                     currentLocation = location
                     updateVisiblePlaces()
+
+                    // Fetch nearby places from API if we've moved significantly
+                    val shouldUpdateApi = lastApiUpdateLocation?.let { lastLoc ->
+                        GeoUtils.calculateDistance(
+                            lastLoc.latitude, lastLoc.longitude,
+                            location.latitude, location.longitude
+                        ) > 10.0 // Update if moved more than 10km
+                    } ?: true // Always update on first location
+
+                    if (shouldUpdateApi) {
+                        fetchNearbyPlaces(location)
+                    }
                 }
             })
         }
@@ -203,7 +220,7 @@ class MainActivity : AppCompatActivity() {
             location.longitude,
             azimuth,
             pitch,
-            PlacesDatabase.places,
+            allPlaces,
             fieldOfViewDegrees = 60.0,
             minPopulation = minPopulation
         )
@@ -319,6 +336,28 @@ class MainActivity : AppCompatActivity() {
                     "Location acquired. Point at ground to see through Earth!",
                     Toast.LENGTH_LONG
                 ).show()
+            }
+        }
+    }
+
+    private fun fetchNearbyPlaces(location: Location) {
+        lifecycleScope.launch {
+            try {
+                // Fetch nearby places from Google Places API
+                val nearbyPlaces = placesApiManager.fetchNearbyPlaces(
+                    location.latitude,
+                    location.longitude,
+                    radiusMeters = 50000.0 // 50km radius
+                )
+
+                // Merge with static database
+                allPlaces = placesApiManager.mergePlaces(nearbyPlaces, PlacesDatabase.places)
+                lastApiUpdateLocation = location
+
+                // Update the view with new places
+                updateVisiblePlaces()
+            } catch (e: Exception) {
+                // Silently fail - continue using static database
             }
         }
     }

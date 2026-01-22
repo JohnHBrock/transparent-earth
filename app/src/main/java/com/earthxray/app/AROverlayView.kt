@@ -61,7 +61,8 @@ class AROverlayView @JvmOverloads constructor(
         val place: Place,
         val screenX: Float,
         val screenY: Float,
-        val distance: Double,
+        val surfaceDistance: Double,
+        val straightLineDistance: Double,
         val azimuth: Double,
         val pitch: Double
     )
@@ -83,24 +84,32 @@ class AROverlayView @JvmOverloads constructor(
     }
 
     fun updateVisiblePlaces(
-        places: List<Pair<Place, Double>>,
+        places: List<GeoUtils.PlaceWithDistances>,
         userLat: Double,
         userLon: Double
     ) {
         this.userLatitude = userLat
         this.userLongitude = userLon
 
-        visiblePlaces = places.mapNotNull { (place, distance) ->
+        visiblePlaces = places.mapNotNull { placeWithDistances ->
             // Calculate direction to point to see this place through Earth
             val direction = GeoUtils.calculateDirectionToPointThroughEarth(
                 userLat, userLon,
-                place.latitude, place.longitude
+                placeWithDistances.place.latitude, placeWithDistances.place.longitude
             ) ?: return@mapNotNull null
 
             val screenPos = calculateScreenPosition(direction.azimuth, direction.pitch)
 
             screenPos?.let {
-                VisiblePlace(place, it.first, it.second, distance, direction.azimuth, direction.pitch)
+                VisiblePlace(
+                    placeWithDistances.place,
+                    it.first,
+                    it.second,
+                    placeWithDistances.surfaceDistance,
+                    placeWithDistances.straightLineDistance,
+                    direction.azimuth,
+                    direction.pitch
+                )
             }
         }
         invalidate()
@@ -154,12 +163,12 @@ class AROverlayView @JvmOverloads constructor(
     private fun drawVisiblePlaces(canvas: Canvas) {
         val sortedPlaces = visiblePlaces
             .filter { it.screenX in 0f..width.toFloat() }
-            .sortedByDescending { it.distance }
+            .sortedByDescending { it.surfaceDistance }
 
         for (vp in sortedPlaces) {
             drawPin(canvas, vp.screenX, vp.screenY)
 
-            val distanceText = GeoUtils.formatDistance(vp.distance)
+            val distanceText = GeoUtils.formatBothDistances(vp.surfaceDistance, vp.straightLineDistance)
             canvas.drawText(vp.place.name, vp.screenX, vp.screenY - 40, textPaint)
             canvas.drawText(distanceText, vp.screenX, vp.screenY - 10, smallTextPaint)
         }

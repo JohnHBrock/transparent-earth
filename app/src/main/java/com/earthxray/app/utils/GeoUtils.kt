@@ -39,6 +39,26 @@ object GeoUtils {
         return EARTH_RADIUS_KM * c
     }
 
+    /**
+     * Calculate the straight-line distance through Earth between two points.
+     * This is the chord distance - the actual length of a ray passing through Earth's interior.
+     */
+    fun calculateStraightLineDistance(
+        lat1: Double, lon1: Double,
+        lat2: Double, lon2: Double
+    ): Double {
+        // Convert both points to 3D Cartesian coordinates
+        val point1 = latLonToCartesian(lat1, lon1)
+        val point2 = latLonToCartesian(lat2, lon2)
+
+        // Calculate Euclidean distance between the two 3D points
+        val dx = point2.x - point1.x
+        val dy = point2.y - point1.y
+        val dz = point2.z - point1.z
+
+        return sqrt(dx * dx + dy * dy + dz * dz) * EARTH_RADIUS_KM
+    }
+
     fun calculateBearing(
         lat1: Double, lon1: Double,
         lat2: Double, lon2: Double
@@ -114,6 +134,12 @@ object GeoUtils {
             distanceKm < 10 -> "%.1f km".format(distanceKm)
             else -> "${distanceKm.toInt()} km"
         }
+    }
+
+    fun formatBothDistances(surfaceDistance: Double, straightLineDistance: Double): String {
+        val surface = formatDistance(surfaceDistance)
+        val throughEarth = formatDistance(straightLineDistance)
+        return "$throughEarth through • $surface around"
     }
 
     /**
@@ -240,7 +266,7 @@ object GeoUtils {
         places: List<Place>,
         fieldOfViewDegrees: Double = 60.0,
         minPopulation: Int = 0
-    ): List<Pair<Place, Double>> {
+    ): List<PlaceWithDistances> {
         val halfFOV = fieldOfViewDegrees / 2.0
 
         return places.mapNotNull { place ->
@@ -258,18 +284,22 @@ object GeoUtils {
             if (abs(deltaAzimuth) <= halfFOV && abs(deltaPitch) <= halfFOV) {
                 // Check population threshold
                 if (place.population >= minPopulation) {
-                    val distance = calculateDistance(
+                    val surfaceDistance = calculateDistance(
                         userLat, userLon,
                         place.latitude, place.longitude
                     )
-                    Pair(place, distance)
+                    val straightLineDistance = calculateStraightLineDistance(
+                        userLat, userLon,
+                        place.latitude, place.longitude
+                    )
+                    PlaceWithDistances(place, surfaceDistance, straightLineDistance)
                 } else {
                     null
                 }
             } else {
                 null
             }
-        }.sortedByDescending { it.first.population }  // Sort by population, highest first
+        }.sortedByDescending { it.place.population }  // Sort by population, highest first
     }
 
     private fun normalizeDegrees(angle: Double): Double {
@@ -278,6 +308,12 @@ object GeoUtils {
         while (normalized < -180) normalized += 360
         return normalized
     }
+
+    data class PlaceWithDistances(
+        val place: Place,
+        val surfaceDistance: Double,
+        val straightLineDistance: Double
+    )
 
     data class PointingDirection(
         val azimuth: Double,
