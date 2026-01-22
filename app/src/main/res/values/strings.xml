@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Earth X-Ray</string>
+    <string name="search_hint">Search for a location...</string>
+    <string name="permission_camera">Camera permission is required for AR</string>
+    <string name="permission_location">Location permission is required to determine your position</string>
+    <string name="arcore_not_supported">ARCore is not supported on this device</string>
+    <string name="point_at_ground">Point your phone at the ground to see through Earth</string>
+    <string name="searching">Point your phone in the direction of the arrow</string>
+</resources>
